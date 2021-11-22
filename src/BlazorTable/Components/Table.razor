@@ -1,0 +1,282 @@
+﻿@namespace BlazorTable
+@typeparam TableItem
+
+@if (ShowChildContentAtTop)
+{
+    <CascadingValue Value="(ITable<TableItem>)this" Name="Table">
+        @ChildContent
+    </CascadingValue>
+}
+
+@if (Columns.Any())
+{
+    var columnCount = Columns.Count + (_detailTemplate != null ? 1 : 0);
+
+    <div class="table-responsive">
+        <table aria-readonly="@(IsEditMode ? "false" : "true")" role="grid" class="@TableClass" @attributes="UnknownParameters">
+            @if (ShowSearchBar || Columns.Exists(column => !column.Visible))
+            {
+                <thead role="search">
+                    <tr>
+                        <th colspan="@columnCount">
+                            @if (ShowSearchBar)
+                            {
+                                <input type="text" class="form-control form-control-sm float-right ml-3" style="width:33%" value="@GlobalSearch" @onchange="@(x => { GlobalSearch = x.Value.ToString(); UpdateAsync(); })" placeholder="@Localization["TableGlobalSearch"]" />
+                            }
+                            @if (Columns.Exists(column => !column.Visible))
+                            {
+                                <div class="float-right" @onclick="@(_ => VisibilityMenuOpen = !VisibilityMenuOpen)">
+                                    <a href="javascript:;" @ref="VisibilityMenuIconRef">
+                                        <span aria-hidden="true">
+                                            <img src="_content/BlazorTable/images/plus.png" />
+                                        </span>
+                                    </a>
+                                </div>
+                                <Popover IsOpen="@VisibilityMenuOpen" Placement="Placement.Bottom" DismissOnNextClick="false" Reference="VisibilityMenuIconRef">
+                                    <h3 class="popover-header">Column Visibility</h3>
+                                    <div class="popover-body">
+                                        <table class="table table-sm table-borderless">
+                                            @foreach (IColumn<TableItem> column in Columns.Where(column => !column.Visible))
+                                            {
+                                                <tr>
+                                                    <td>
+                                                        @(column.Title)
+                                                    </td>
+                                                    <td>
+                                                        <div class="float-right" @onclick="@(_ => { column.Visible = true; if (!Columns.Exists(column => !column.Visible)) VisibilityMenuOpen = false;})">
+                                                            <a href="javascript:;">
+                                                                <span aria-hidden="true">
+                                                                    <img src="_content/BlazorTable/images/plus.png" />
+                                                                </span>
+                                                            </a>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+
+                                            }
+                                        </table>
+                                        <button class="btn btn-sm btn-danger" @onclick="@(_ => VisibilityMenuOpen = false)">
+                                            Close
+                                        </button>
+                                    </div>
+                                </Popover>
+                            }
+                        </th>
+                    </tr>
+                </thead>
+            }
+
+            <thead class="@TableHeadClass">
+                <tr style="cursor: pointer;">
+                    @if (_detailTemplate != null)
+                    {
+                        <th style="width: 1%"></th>
+                    }
+                    @foreach (IColumn<TableItem> column in Columns)
+                    {
+                        @if (column.Visible)
+                        {
+                            <th scope="col" style="@(!string.IsNullOrEmpty(column.Width) ? $"width:{column.Width};" : "") user-select: none"
+                                @ondrop="@(_ => HandleDrop(column))"
+                                @ondragstart="@(_ => HandleDragStart(column))"
+                                ondragover="event.preventDefault();"
+                                draggable="@(ColumnReorder.ToString())"
+                                @key="column"
+                                aria-sort="@column.AriaSort"
+                                class="@(column.Class)">
+
+                                <div @onclick="@(async () => await column.SortByAsync())">
+                                    <span>@column.Title</span>
+
+                                    @if (column.SortColumn)
+                                    {
+                                        if (column.SortDescending)
+                                        {<span aria-hidden="true"><img src="_content/BlazorTable/images/sort-desc.png" /></span> }
+                                        else
+                                        { <span aria-hidden="true"><img src="_content/BlazorTable/images/sort-asc.png" /></span>}
+                                    }
+
+                                    @if (column.Filterable)
+                                    {
+                                        <div class="float-right" @onclick="@(_ => column.ToggleFilter())" @onclick:stopPropagation>
+                                            <a href="javascript:;" @ref="column.FilterRef" aria-expanded="@(column.FilterOpen ? "true" : "false")" style="text-decoration: none" aria-label="@(column.Filter == null ? "unfiltered" : "filtered")">
+                                                <span aria-hidden="true" style="@(column.Filter == null ? "opacity: 0.2;" : string.Empty)">
+                                                    <img src="_content/BlazorTable/images/filter.png" />
+                                                </span>
+                                            </a>
+                                        </div>
+                                        <CascadingValue Value="column" Name="Column">
+                                            <Popover Reference="@column.FilterRef" IsOpen="@column.FilterOpen" Placement="Placement.Bottom" DismissOnNextClick="false">
+                                                <h3 class="popover-header">Filter</h3>
+                                                <div class="popover-body">
+                                                    <FilterManager TableItem="TableItem">
+                                                        <StringFilter TableItem="TableItem" />
+                                                        <BooleanFilter TableItem="TableItem" />
+                                                        <NumberFilter TableItem="TableItem" />
+                                                        <DateFilter TableItem="TableItem" />
+                                                        <EnumFilter TableItem="TableItem" />
+                                                        @if (column.CustomIFilters != null)
+                                                        {
+                                                            @column.CustomIFilters(column)
+                                                        }
+                                                    </FilterManager>
+                                                </div>
+                                            </Popover>
+                                        </CascadingValue>
+                                    }
+
+                                    @if (column.Hideable)
+                                    {
+                                        <div class="float-right mr-1" @onclick="@(_ => column.Visible = false)" @onclick:stopPropagation>
+                                            <span aria-hidden="true">
+                                                <img src="_content/BlazorTable/images/minus.png" />
+                                            </span>
+                                        </div>
+                                    }
+                                </div>
+                            </th>
+                        }
+                    }
+                </tr>
+            </thead>
+            <tbody class="@TableBodyClass">
+                @if (FilteredItems != null)
+                {
+                    if (FilteredItems.Any())
+                    {
+                        int i = 0;
+                        bool detailViewActive = _detailTemplate != null;
+
+                        foreach (TableItem item in FilteredItems)
+                        {
+                            bool rowDisplayed = false;
+
+                            foreach (CustomRow<TableItem> customRow in CustomRows)
+                            {
+                                if (customRow.IsActiveForItem != null && customRow.IsActiveForItem(item))
+                                {
+                                    @customRow.ChildContent(item)
+                                    rowDisplayed = true;
+                                    break;
+                                }
+                            }
+
+                            if (!rowDisplayed)
+                            {
+                                <tr @key="item" aria-selected="@(SelectedItems.Contains(item) ? "true" : null)" class="@RowClass(item) @(SelectedItems.Contains(item) ? "table-active" : "")" @onclick="(() => OnRowClickHandler(item))">
+
+                                    @{
+                                        int locali = i;
+                                        if (!detailsViewOpen.ContainsKey(locali))
+                                        {
+                                            detailsViewOpen[locali] = false;
+                                        }
+                                    }
+                                    @if (detailViewActive)
+                                    {
+                                        <td>
+                                            <a href="javascript:;" style="text-decoration: none" @onclick="@(() => { detailsViewOpen[locali] = !detailsViewOpen[locali]; StateHasChanged(); })" title="@Localization["TableDetailsView"]" aria-expanded="@(detailsViewOpen[locali] ? "true" : "false")">
+                                                @if (detailsViewOpen[locali])
+                                                {<span aria-hidden="true"><img src="_content/BlazorTable/images/minus.png" /></span>}
+                                                else
+                                                {<span aria-hidden="true"><img src="_content/BlazorTable/images/plus.png" /></span>}
+                                            </a>
+                                        </td>
+                                    }
+
+                                    @foreach (IColumn<TableItem> column in Columns)
+                                    {
+                                        @if (column.Visible)
+                                        {
+                                            <td @key="column"
+                                                style="@(column.Align > 0 ? $"text-align: {column.Align};" : "")"
+                                                class="@(column.Class)">
+
+                                                @if (IsEditMode && column.EditTemplate != null)
+                                                    @column.EditTemplate(item)
+                                                    else if (column.Template == null)
+                                                        @column.Render(item)
+                                                        else
+                                                            @column.Template(item)
+                                            </td>
+                                        }
+                                    }
+                                </tr>
+
+                                if (detailViewActive && detailsViewOpen[i])
+                                {
+                                    <tr>
+                                        <td></td>
+                                        <td colspan="@(Columns.Count)">
+                                            @_detailTemplate(item)
+                                        </td>
+                                    </tr>
+                                }
+                            }
+
+                            { i++; }
+                        }
+                    }
+                    else if (_emptyDataTemplate != null)
+                    {
+                        <tr>
+                            <td colspan="@columnCount">
+                                @_emptyDataTemplate
+                            </td>
+                        </tr>
+                    }
+                }
+                else
+                {
+                    <tr>
+                        <td colspan="@columnCount">
+                            @if (_loadingDataTemplate != null)
+                            {
+                                @_loadingDataTemplate
+                            }
+                            else
+                            {
+                                <div class="text-center">
+                                    @Localization["TableLoading"]
+                                </div>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+
+            @if (ShowFooter)
+            {
+                <tfoot class="@TableFooterClass">
+                    <tr>
+                        @if (_detailTemplate != null)
+                        {
+                            <td style="width: 1%"></td>
+                        }
+                        @foreach (IColumn<TableItem> column in Columns)
+                        {
+                            <td @key="column" style="@(column.Align > 0 ? $"text-align: {column.Align};" : "")" class="@(column.ColumnFooterClass)">
+                                @if (!string.IsNullOrEmpty(column.SetFooterValue))
+                                {
+                                    @column.SetFooterValue
+                                }
+                                else if (FilteredItems != null && FilteredItems.Any())
+                                {
+                                    @column.GetFooterValue()
+                                }
+                            </td>
+                        }
+                    </tr>
+                </tfoot>
+            }
+        </table>
+    </div>
+}
+
+@if (!ShowChildContentAtTop)
+{
+    <CascadingValue Value="(ITable<TableItem>)this" Name="Table">
+        @ChildContent
+    </CascadingValue>
+}
+

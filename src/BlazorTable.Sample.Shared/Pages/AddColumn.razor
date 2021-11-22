@@ -1,0 +1,59 @@
+﻿@page "/AddColumn"
+@inject HttpClient Http
+@using BlazorTable
+@using System.ComponentModel
+
+<h1>Add Column Programmatically</h1>
+
+<button class="btn btn-sm btn-danger" title="Add Column" @onclick="@((x) => Add())">Add Column</button>
+<br />
+<br />
+<Table TableItem="PersonData" Items="data" PageSize="15" @ref="Table" ColumnReorder="true">
+    <Column TableItem="PersonData" Title="Id" Field="@(x => x.id)" Sortable="true" Filterable="true" Width="10%"  DefaultSortColumn="true"  />
+    <Pager ShowPageNumber="true" ShowTotalCount="true" />
+</Table>
+
+@code
+{
+    private ITable<PersonData> Table;
+
+    private PersonData[] data;
+
+    protected override async Task OnInitializedAsync()
+    {
+        data = await Http.GetFromJsonAsync<PersonData[]>("sample-data/MOCK_DATA.json");
+    }
+
+    public class PersonData
+    {
+        public int? id { get; set; }
+        public string full_name { get; set; }
+        public string email { get; set; }
+        public bool? paid { get; set; }
+        public decimal? price { get; set; }
+        public CreditCard? cc_type { get; set; }
+        public DateTime? created_date { get; set; }
+    }
+
+    public enum CreditCard
+    {
+        none = 0,
+        [Description("MasterCard")]
+        MasterCard = 1,
+        Visa = 2
+    }
+
+    private void Add()
+    {
+        var col = new Column<PersonData>()
+        {
+            Title = "Enum",
+            Field = (x) => x.cc_type,
+            Sortable = true,
+            Filterable = true,
+            Width = "10%"
+        };
+
+        Table.AddColumn(col);
+    }
+}

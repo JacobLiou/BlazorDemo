@@ -1,0 +1,54 @@
+﻿@page "/404"
+
+@using BlazorTable
+
+<h3>Component1</h3>
+
+<Table TableItem="Parent" Items="items">
+    <Column TableItem="Parent" Title="Inner Value" Field="@(x => x.Child.Name)"
+            Sortable="true" Filterable="true">
+        <Template>
+            @if (context?.Child?.Name == null)
+            {
+                <text>N/A</text>
+            }
+            else
+            {
+                @context.Child.Name
+            }
+        </Template>
+    </Column>
+</Table>
+
+@code {
+    private List<Parent> items = new List<Parent>();
+
+    protected override void OnInitialized()
+    {
+        for (int i = 0; i < 10; i++)
+        {
+            items.Add(new Parent() { Name = i.ToString() });
+        }
+    }
+
+
+    private class Parent
+    {
+        public string Name { get; set; }
+
+        public Child Child { get; set; }
+    }
+
+    private class Child
+    {
+        public string Name { get; set; }
+
+        public GrandChild GrandChild { get; set; }
+    }
+
+    private class GrandChild
+    {
+        public string Name { get; set; }
+    }
+
+}
